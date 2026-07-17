@@ -1,19 +1,26 @@
+import json
 import pulumi
 import pulumi_kubernetes as k8s
-
 
 config = pulumi.Config()
 grafana_admin_password = config.require_secret("grafanaAdminPassword")
 
-
-# 1. Create a dedicated namespace for monitoring
+# -----------------------------------------------------------------------------
+# Namespaces
+# -----------------------------------------------------------------------------
 monitoring_namespace = k8s.core.v1.Namespace(
     "monitoring",
     metadata=k8s.meta.v1.ObjectMetaArgs(name="monitoring"),
 )
 
+app_namespace = k8s.core.v1.Namespace(
+    "guestbook",
+    metadata=k8s.meta.v1.ObjectMetaArgs(name="guestbook"),
+)
 
-# 2. Create a secret for Grafana admin credentials
+# -----------------------------------------------------------------------------
+# Grafana admin secret
+# -----------------------------------------------------------------------------
 grafana_admin_secret = k8s.core.v1.Secret(
     "grafana-admin-secret",
     metadata=k8s.meta.v1.ObjectMetaArgs(
@@ -26,8 +33,9 @@ grafana_admin_secret = k8s.core.v1.Secret(
     },
 )
 
-
-# 3. Deploy Prometheus and Grafana using kube-prometheus-stack
+# -----------------------------------------------------------------------------
+# kube-prometheus-stack
+# -----------------------------------------------------------------------------
 prometheus_stack = k8s.helm.v3.Chart(
     "kube-prometheus-stack",
     k8s.helm.v3.ChartOpts(
@@ -39,6 +47,7 @@ prometheus_stack = k8s.helm.v3.Chart(
         namespace=monitoring_namespace.metadata.name,
         values={
             "grafana": {
+                "enabled": True,
                 "service": {
                     "type": "NodePort",
                     "port": 80,
@@ -50,8 +59,15 @@ prometheus_stack = k8s.helm.v3.Chart(
                     "userKey": "admin-user",
                     "passwordKey": "admin-password",
                 },
+                "sidecar": {
+                    "dashboards": {
+                        "enabled": True,
+                        "label": "grafana_dashboard",
+                    }
+                },
             },
             "prometheus": {
+                "enabled": True,
                 "prometheusSpec": {
                     "serviceMonitorSelectorNilUsesHelmValues": False,
                 },
@@ -61,18 +77,15 @@ prometheus_stack = k8s.helm.v3.Chart(
     opts=pulumi.ResourceOptions(depends_on=[grafana_admin_secret]),
 )
 
-
-# 4. Guestbook application namespace
-app_namespace = k8s.core.v1.Namespace(
-    "guestbook",
-    metadata=k8s.meta.v1.ObjectMetaArgs(name="guestbook"),
-)
-
-
-# 5. Redis leader deployment
+# -----------------------------------------------------------------------------
+# Guestbook app resources
+# -----------------------------------------------------------------------------
 redis_leader_deployment = k8s.apps.v1.Deployment(
     "redis-leader",
-    metadata=k8s.meta.v1.ObjectMetaArgs(namespace=app_namespace.metadata.name),
+    metadata=k8s.meta.v1.ObjectMetaArgs(
+        namespace=app_namespace.metadata.name,
+        labels={"app": "redis", "role": "leader"},
+    ),
     spec=k8s.apps.v1.DeploymentSpecArgs(
         selector=k8s.meta.v1.LabelSelectorArgs(
             match_labels={"app": "redis", "role": "leader"}
@@ -87,9 +100,11 @@ redis_leader_deployment = k8s.apps.v1.Deployment(
                     k8s.core.v1.ContainerArgs(
                         name="leader",
                         image="docker.io/redis:6.0.5",
-                        ports=[
-                            k8s.core.v1.ContainerPortArgs(container_port=6379)
-                        ],
+                        ports=[k8s.core.v1.ContainerPortArgs(container_port=6379)],
+                        resources=k8s.core.v1.ResourceRequirementsArgs(
+                            requests={"cpu": "50m", "memory": "64Mi"},
+                            limits={"cpu": "250m", "memory": "128Mi"},
+                        ),
                     )
                 ],
             ),
@@ -97,24 +112,25 @@ redis_leader_deployment = k8s.apps.v1.Deployment(
     ),
 )
 
-
 redis_leader_service = k8s.core.v1.Service(
     "redis-leader",
     metadata=k8s.meta.v1.ObjectMetaArgs(
         name="redis-leader",
         namespace=app_namespace.metadata.name,
+        labels={"app": "redis", "role": "leader"},
     ),
     spec=k8s.core.v1.ServiceSpecArgs(
-        ports=[k8s.core.v1.ServicePortArgs(port=6379, target_port=6379)],
+        ports=[k8s.core.v1.ServicePortArgs(name="redis", port=6379, target_port=6379)],
         selector={"app": "redis", "role": "leader"},
     ),
 )
 
-
-# 6. Frontend deployment
 frontend_deployment = k8s.apps.v1.Deployment(
     "frontend",
-    metadata=k8s.meta.v1.ObjectMetaArgs(namespace=app_namespace.metadata.name),
+    metadata=k8s.meta.v1.ObjectMetaArgs(
+        namespace=app_namespace.metadata.name,
+        labels={"app": "guestbook", "tier": "frontend"},
+    ),
     spec=k8s.apps.v1.DeploymentSpecArgs(
         selector=k8s.meta.v1.LabelSelectorArgs(
             match_labels={"app": "guestbook", "tier": "frontend"}
@@ -133,19 +149,17 @@ frontend_deployment = k8s.apps.v1.Deployment(
                     k8s.core.v1.ContainerArgs(
                         name="php-redis",
                         image="us-docker.pkg.dev/google-samples/containers/gke/gb-frontend:v5",
+                        ports=[k8s.core.v1.ContainerPortArgs(container_port=80)],
                         resources=k8s.core.v1.ResourceRequirementsArgs(
-                            requests={"cpu": "100m", "memory": "100Mi"},
+                            requests={"cpu": "100m", "memory": "128Mi"},
+                            limits={"cpu": "500m", "memory": "256Mi"},
                         ),
-                        ports=[
-                            k8s.core.v1.ContainerPortArgs(container_port=80)
-                        ],
                     )
                 ],
             ),
         ),
     ),
 )
-
 
 frontend_service = k8s.core.v1.Service(
     "frontend",
@@ -168,38 +182,117 @@ frontend_service = k8s.core.v1.Service(
     ),
 )
 
-
-# 7. ServiceMonitor for frontend
+# -----------------------------------------------------------------------------
+# Optional ServiceMonitor
+# Note: this targets the frontend service, but the dashboard below relies on
+# cluster resource metrics, which are definitely available from the stack.
+# -----------------------------------------------------------------------------
 frontend_service_monitor = k8s.apiextensions.CustomResource(
     "frontend-servicemonitor",
     api_version="monitoring.coreos.com/v1",
     kind="ServiceMonitor",
-    metadata=k8s.meta.v1.ObjectMetaArgs(
-        name="frontend-monitor",
-        namespace=monitoring_namespace.metadata.name,
-        labels={"release": "kube-prometheus-stack"},
-    ),
+    metadata={
+        "name": "frontend-monitor",
+        "namespace": "monitoring",
+        "labels": {"release": "kube-prometheus-stack"},
+    },
     spec={
         "selector": {"matchLabels": {"app": "guestbook", "tier": "frontend"}},
         "namespaceSelector": {"matchNames": ["guestbook"]},
-        "endpoints": [{"port": "http", "interval": "15s"}],
+        "endpoints": [{"port": "http", "interval": "15s", "path": "/"}],
     },
     opts=pulumi.ResourceOptions(depends_on=[prometheus_stack, frontend_service]),
 )
 
+# -----------------------------------------------------------------------------
+# Grafana dashboard for Guestbook pod resource metrics
+# -----------------------------------------------------------------------------
+dashboard = {
+    "title": "Guestbook Resource Overview",
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "10s",
+    "tags": ["guestbook", "kubernetes", "pulumi"],
+    "panels": [
+        {
+            "id": 1,
+            "type": "timeseries",
+            "title": "Frontend Pod CPU Usage",
+            "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+            "targets": [
+                {
+                    "refId": "A",
+                    "expr": 'sum(rate(container_cpu_usage_seconds_total{namespace="guestbook", pod=~"frontend-.*", container!="POD"}[5m])) by (pod)',
+                    "legendFormat": "{{pod}}",
+                }
+            ],
+        },
+        {
+            "id": 2,
+            "type": "timeseries",
+            "title": "Frontend Pod Memory Usage",
+            "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+            "targets": [
+                {
+                    "refId": "A",
+                    "expr": 'sum(container_memory_working_set_bytes{namespace="guestbook", pod=~"frontend-.*", container!="POD"}) by (pod)',
+                    "legendFormat": "{{pod}}",
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "bytes",
+                },
+                "overrides": [],
+            },
+        },
+        {
+            "id": 3,
+            "type": "timeseries",
+            "title": "Frontend Pod Restarts",
+            "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+            "targets": [
+                {
+                    "refId": "A",
+                    "expr": 'sum(kube_pod_container_status_restarts_total{namespace="guestbook", pod=~"frontend-.*"}) by (pod)',
+                    "legendFormat": "{{pod}}",
+                }
+            ],
+        },
+        {
+            "id": 4,
+            "type": "timeseries",
+            "title": "Redis Leader CPU Usage",
+            "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+            "targets": [
+                {
+                    "refId": "A",
+                    "expr": 'sum(rate(container_cpu_usage_seconds_total{namespace="guestbook", pod=~"redis-leader-.*", container!="POD"}[5m])) by (pod)',
+                    "legendFormat": "{{pod}}",
+                }
+            ],
+        },
+    ],
+}
 
-# 8. Outputs
-def build_grafana_access():
-    return {
-        "url": "http://localhost:30300",
-        "username": "admin",
-        "password": grafana_admin_password,
-    }
+grafana_dashboard_cm = k8s.core.v1.ConfigMap(
+    "guestbook-grafana-dashboard",
+    metadata=k8s.meta.v1.ObjectMetaArgs(
+        name="guestbook-dashboard",
+        namespace=monitoring_namespace.metadata.name,
+        labels={"grafana_dashboard": "1"},
+    ),
+    data={
+        "guestbook-resource-overview.json": json.dumps(dashboard)
+    },
+    opts=pulumi.ResourceOptions(depends_on=[prometheus_stack]),
+)
 
-
-grafana = build_grafana_access()
-
-pulumi.export("grafana_url", grafana["url"])
-pulumi.export("grafana_admin_username", grafana["username"])
-pulumi.export("grafana_admin_password", grafana["password"])
+# -----------------------------------------------------------------------------
+# Outputs
+# -----------------------------------------------------------------------------
+pulumi.export("grafana_url", "http://localhost:30300")
+pulumi.export("grafana_admin_username", "admin")
+pulumi.export("grafana_admin_password", grafana_admin_password)
 pulumi.export("guestbook_url", "http://localhost:30080")
