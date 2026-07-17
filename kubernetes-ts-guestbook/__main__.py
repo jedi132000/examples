@@ -143,23 +143,16 @@ frontend_service_monitor = k8s.apiextensions.CustomResource(
 )
 
 # --- OUTPUTS ---
-def get_grafana_url(status):
-    if not status or 'load_balancer' not in status:
-        return "Pending allocation... (check using kubectl)"
-    ingress = status['load_balancer'].get('ingress', [])
-    if not ingress:
-        return "Pending allocation..."
-    endpoint = ingress[0]
-    if 'ip' in endpoint:
-        return f"http://{endpoint['ip']}"
-    elif 'hostname' in endpoint:
-        return f"http://{endpoint['hostname']}"
-    return "Pending IP allocation..."
+def get_grafana_access():
+    config = pulumi.Config()
+    return (
+        "http://localhost:3000",
+        "admin",
+        config.require_secret("grafanaAdminPassword"),
+    )
 
-grafana_service_status = prometheus_stack.get_resource(
-    "v1/Service", "monitoring/kube-prometheus-stack-grafana"
-).status
+grafana_url, grafana_admin_username, grafana_admin_password = get_grafana_access()
 
-pulumi.export("grafana_url", grafana_service_status.apply(get_grafana_url))
-pulumi.export("grafana_admin_username", "admin")
-pulumi.export("grafana_admin_password", pulumi.Output.secret("admin-secret-password"))
+pulumi.export("grafana_url", grafana_url)
+pulumi.export("grafana_admin_username", grafana_admin_username)
+pulumi.export("grafana_admin_password", grafana_admin_password)
