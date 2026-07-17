@@ -21,7 +21,10 @@ prometheus_stack = k8s.helm.v3.Chart(
         values={
             "grafana": {
                 "service": {
-                    "type": "ClusterIP",
+                    "type": "NodePort",
+                    "port": 80,
+                    "targetPort": 3000,
+                    "nodePort": 30300
                 },
                 "adminPassword": "admin-secret-password",
             },
@@ -118,8 +121,8 @@ frontend_service = k8s.core.v1.Service(
         labels={"app": "guestbook", "tier": "frontend"},
     ),
     spec=k8s.core.v1.ServiceSpecArgs(
-        type="LoadBalancer",
-        ports=[k8s.core.v1.ServicePortArgs(port=80, target_port=80)],
+        type="NodePort",
+        ports=[k8s.core.v1.ServicePortArgs(port=80, target_port=30080)],
         selector={"app": "guestbook", "tier": "frontend"},
     )
 )
@@ -143,16 +146,17 @@ frontend_service_monitor = k8s.apiextensions.CustomResource(
 )
 
 # --- OUTPUTS ---
-def get_grafana_access():
+def build_grafana_access():
     config = pulumi.Config()
-    return (
-        "http://localhost:3000",
-        "admin",
-        config.require_secret("grafanaAdminPassword"),
-    )
+    return {
+        "url": "http://localhost:3000",
+        "username": "admin",
+        "password": config.require_secret("grafanaAdminPassword"),
+    }
 
-grafana_url, grafana_admin_username, grafana_admin_password = get_grafana_access()
 
-pulumi.export("grafana_url", grafana_url)
-pulumi.export("grafana_admin_username", grafana_admin_username)
-pulumi.export("grafana_admin_password", grafana_admin_password)
+grafana = build_grafana_access()
+
+pulumi.export("grafana_url", grafana["url"])
+pulumi.export("grafana_admin_username", grafana["username"])
+pulumi.export("grafana_admin_password", grafana["password"])
