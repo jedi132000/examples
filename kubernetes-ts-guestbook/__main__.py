@@ -21,7 +21,7 @@ prometheus_stack = k8s.helm.v3.Chart(
         values={
             "grafana": {
                 "service": {
-                    "type": "LoadBalancer",
+                    "type": "ClusterIP",
                 },
                 "adminPassword": "admin-secret-password",
             },
@@ -36,7 +36,7 @@ prometheus_stack = k8s.helm.v3.Chart(
             lambda obj, opts: (
                 #  Correct: Use Kubernetes CustomResourceOptions
                 pulumi.ResourceOptions.merge(opts, pulumi.ResourceOptions()) 
-                if obj.get("kind") == "Service" 
+                if obj.get("kind") == "Service"
                 else None
             )
         ]
