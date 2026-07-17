@@ -1,12 +1,12 @@
 # Observability Roadmap
 
-This document outlines how the current Guestbook monitoring implementation could evolve beyond the coding exercise into a more complete observability and incident-response platform. The exercise itself focuses on deploying Prometheus and Grafana with Pulumi, enabling Guestbook monitoring, exposing Grafana, and optionally building a basic dashboard. This roadmap shows what the next 90 days could look like if the same foundation were extended in a production setting. [mail.google](https://mail.google.com/mail/u/1/#search/4/FMfcgzQhVNZkmxxKMDkGvhhhLRblJhJG)
+This document outlines how the current Guestbook monitoring implementation could evolve beyond the coding exercise into a more complete observability and incident-response platform. The exercise itself focuses on deploying Prometheus and Grafana with Pulumi, enabling Guestbook monitoring, exposing Grafana, and optionally building a basic dashboard. This roadmap shows what the next 90 days could look like if the same foundation were extended in a production setting. 
 
 ## Intent
 
-The current implementation intentionally focuses on what can be delivered accurately within the scope of the exercise: Prometheus and Grafana deployed with Pulumi, Guestbook workload monitoring, Grafana exposure, and a basic dashboard centered on pod resource usage. The assignment explicitly allows simple metrics such as request counts or resource usage, so starting with Guestbook CPU, memory, and restart signals is a practical and defensible baseline. [mail.google](https://mail.google.com/mail/u/1/#search/4/FMfcgzQhVNZkmxxKMDkGvhhhLRblJhJG)
+The current implementation intentionally focuses on what can be delivered accurately within the scope of the exercise: Prometheus and Grafana deployed with Pulumi, Guestbook workload monitoring, Grafana exposure, and a basic dashboard centered on pod resource usage. The assignment explicitly allows simple metrics such as request counts or resource usage, so starting with Guestbook CPU, memory, and restart signals is a practical and defensible baseline. 
 
-The goal of this roadmap is not to suggest that a short take-home should include a full platform rollout. Instead, it shows how this initial deployment could mature into a more complete observability stack with richer telemetry, better incident handling, and a clearer path toward AIOps-style automation. [mail.google](https://mail.google.com/mail/u/1/#search/4/FMfcgzQhVNZkmxxKMDkGvhhhLRblJhJG)
+The goal of this roadmap is not to suggest that a short take-home should include a full platform rollout. Instead, it shows how this initial deployment could mature into a more complete observability stack with richer telemetry, better incident handling, and a clearer path toward AIOps-style automation. 
 
 ## Days 0-30
 
