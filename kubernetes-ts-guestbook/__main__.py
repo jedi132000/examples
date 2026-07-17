@@ -34,7 +34,8 @@ prometheus_stack = k8s.helm.v3.Chart(
         # This transformation tells Pulumi to skip awaiting readiness for any LoadBalancer service created by the chart
         transformations=[
             lambda obj, opts: (
-                pulumi.ResourceOptions.merge(opts, pulumi.ResourceOptions(skip_await=True)) 
+                #  Correct: Use Kubernetes CustomResourceOptions
+                pulumi.ResourceOptions.merge(opts, k8s.CustomResourceOptions(skip_await=True)) 
                 if obj.get("kind") == "Service" 
                 else None
             )
