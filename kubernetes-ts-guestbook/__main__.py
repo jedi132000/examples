@@ -19,22 +19,7 @@ app_namespace = k8s.core.v1.Namespace(
 )
 
 # -----------------------------------------------------------------------------
-# Grafana admin secret
-# -----------------------------------------------------------------------------
-grafana_admin_secret = k8s.core.v1.Secret(
-    "grafana-admin-secret",
-    metadata=k8s.meta.v1.ObjectMetaArgs(
-        name="grafana-admin-credentials",
-        namespace=monitoring_namespace.metadata.name,
-    ),
-    string_data={
-        "admin-user": "admin",
-        "admin-password": grafana_admin_password,
-    },
-)
-
-# -----------------------------------------------------------------------------
-# kube-prometheus-stack
+# Deploy Prometheus + Grafana using kube-prometheus-stack
 # -----------------------------------------------------------------------------
 prometheus_stack = k8s.helm.v3.Chart(
     "kube-prometheus-stack",
@@ -48,16 +33,13 @@ prometheus_stack = k8s.helm.v3.Chart(
         values={
             "grafana": {
                 "enabled": True,
+                "adminUser": "admin",
+                "adminPassword": grafana_admin_password,
                 "service": {
                     "type": "NodePort",
                     "port": 80,
                     "targetPort": 3000,
                     "nodePort": 30300,
-                },
-                "admin": {
-                    "existingSecret": "grafana-admin-credentials",
-                    "userKey": "admin-user",
-                    "passwordKey": "admin-password",
                 },
                 "sidecar": {
                     "dashboards": {
@@ -74,11 +56,10 @@ prometheus_stack = k8s.helm.v3.Chart(
             },
         },
     ),
-    opts=pulumi.ResourceOptions(depends_on=[grafana_admin_secret]),
 )
 
 # -----------------------------------------------------------------------------
-# Guestbook app resources
+# Guestbook - Redis leader
 # -----------------------------------------------------------------------------
 redis_leader_deployment = k8s.apps.v1.Deployment(
     "redis-leader",
@@ -125,6 +106,9 @@ redis_leader_service = k8s.core.v1.Service(
     ),
 )
 
+# -----------------------------------------------------------------------------
+# Guestbook - Frontend
+# -----------------------------------------------------------------------------
 frontend_deployment = k8s.apps.v1.Deployment(
     "frontend",
     metadata=k8s.meta.v1.ObjectMetaArgs(
@@ -183,9 +167,7 @@ frontend_service = k8s.core.v1.Service(
 )
 
 # -----------------------------------------------------------------------------
-# Optional ServiceMonitor
-# Note: this targets the frontend service, but the dashboard below relies on
-# cluster resource metrics, which are definitely available from the stack.
+# ServiceMonitor
 # -----------------------------------------------------------------------------
 frontend_service_monitor = k8s.apiextensions.CustomResource(
     "frontend-servicemonitor",
@@ -199,13 +181,20 @@ frontend_service_monitor = k8s.apiextensions.CustomResource(
     spec={
         "selector": {"matchLabels": {"app": "guestbook", "tier": "frontend"}},
         "namespaceSelector": {"matchNames": ["guestbook"]},
-        "endpoints": [{"port": "http", "interval": "15s", "path": "/"}],
+        "endpoints": [
+            {
+                "port": "http",
+                "interval": "15s",
+                "path": "/",
+            }
+        ],
     },
     opts=pulumi.ResourceOptions(depends_on=[prometheus_stack, frontend_service]),
 )
 
 # -----------------------------------------------------------------------------
-# Grafana dashboard for Guestbook pod resource metrics
+# Grafana dashboard
+# Safe focus: pod resource metrics and restarts
 # -----------------------------------------------------------------------------
 dashboard = {
     "title": "Guestbook Resource Overview",
