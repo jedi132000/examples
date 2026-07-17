@@ -35,7 +35,7 @@ prometheus_stack = k8s.helm.v3.Chart(
         transformations=[
             lambda obj, opts: (
                 #  Correct: Use Kubernetes CustomResourceOptions
-                pulumi.ResourceOptions.merge(opts, k8s.CustomResourceOptions(skip_await=True)) 
+                pulumi.ResourceOptions.merge(opts, pulumi.ResourceOptions()) 
                 if obj.get("kind") == "Service" 
                 else None
             )
