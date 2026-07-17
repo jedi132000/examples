@@ -1,23 +1,21 @@
-[![Deploy this example with Pulumi](https://www.pulumi.com/images/deploy-with-pulumi/dark.svg)](https://app.pulumi.com/new?template=https://github.com/pulumi/examples/tree/master/kubernetes-ts-guestbook/components#gh-light-mode-only)
-[![Deploy this example with Pulumi](https://get.pulumi.com/new/button-light.svg)](https://app.pulumi.com/new?template=https://github.com/pulumi/examples/tree/master/kubernetes-ts-guestbook/components#gh-dark-mode-only)
+# Kubernetes Guestbook with Prometheus & Grafana Monitoring
 
-# Simple and Component-based Kubernetes Guestbook Apps
+This repository contains a Pulumi Python program to deploy the classic **Kubernetes Guestbook Application** alongside an automated, production-grade **Prometheus and Grafana** monitoring stack using the Helm-based Prometheus Operator.
 
-A port of the standard [Kubernetes Guestbook](https://kubernetes.io/docs/tutorials/stateless-application/guestbook/)
-to Pulumi. This example shows you how to build and deploy a simple, multi-tier web application using Kubernetes and
-Docker, and consists of three components:
+---
 
-* A single-instance Redis master to store guestbook entries
-* Multiple replicated Redis instances to serve reads
-* Multiple web frontend instances
+## Prerequisites
 
-There is an [interactive Tutorial available](https://www.pulumi.com/docs/tutorials/kubernetes/guestbook/) for
-this example. If this is your first time using Pulumi for Kubernetes, we recommend starting there.
+Before deploying, ensure you have:
+* An active Kubernetes Cluster (EKS, GKE, LKE, minikube, or kind).
+* [Pulumi CLI](https://www.pulumi.com/docs/get-started/install/) installed and configured.
+* Python 3.9+ and `pip` installed.
+* Your local `kubeconfig` actively targeted to your running cluster.
 
-In this directory, you will find two variants of the Guestbook:
+---
 
-1. [simple/](./simple) is a straight port of the original YAML.
-2. [components](./components) demonstrates benefits of using a real language, namely eliminating boilerplate through
-   the use of real component abstractions.
+## Deployment Instructions
 
-Both examples provision the exact same Kubernetes Guestbook application, but showcase different aspects of Pulumi.
+1. **Navigate** to your project directory:
+   ```bash
+   cd guestbook-monitoring-standard
