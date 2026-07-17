@@ -9,6 +9,7 @@ monitoring_namespace = k8s.core.v1.Namespace(
 )
 
 # 2. Deploy Prometheus and Grafana using the kube-prometheus-stack Helm Chart
+# 2. Deploy Prometheus and Grafana using the kube-prometheus-stack Helm Chart
 prometheus_stack = k8s.helm.v3.Chart(
     "kube-prometheus-stack",
     k8s.helm.v3.ChartOpts(
@@ -31,6 +32,14 @@ prometheus_stack = k8s.helm.v3.Chart(
                 },
             },
         },
+        # This transformation tells Pulumi to skip awaiting readiness for any LoadBalancer service created by the chart
+        transformations=[
+            lambda obj, opts: (
+                opts.update(pulumi.ResourceOptions(skip_await=True)) 
+                if obj.get("kind") == "Service" 
+                else None
+            )
+        ]
     )
 )
 
