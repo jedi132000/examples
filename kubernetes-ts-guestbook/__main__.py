@@ -99,7 +99,7 @@ frontend_deployment = k8s.apps.v1.Deployment(
             spec=k8s.core.v1.PodSpecArgs(
                 containers=[k8s.core.v1.ContainerArgs(
                     name="php-redis",
-                    image="docker.io/clark921/gb-frontend:v4",
+                    image="us-docker.pkg.dev/google-samples/containers/gke/gb-frontend:v5",
                     resources=k8s.core.v1.ResourceRequirementsArgs(
                         requests={"cpu": "100m", "memory": "100Mi"},
                     ),
