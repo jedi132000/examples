@@ -22,11 +22,13 @@ This project deploys a Kubernetes Guestbook application together with a monitori
 ## Project structure
 
 ```text
+## Project structure
 .
 ├── Pulumi.yaml
 ├── Pulumi.<stack>.yaml
 ├── requirements.txt
-└── __main__.py
+├── __main__.py
+└── observability_roadmap.md
 ```
 
 ## Python dependencies
