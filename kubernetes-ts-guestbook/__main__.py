@@ -2,8 +2,14 @@ import json
 import pulumi
 import pulumi_kubernetes as k8s
 
+
 config = pulumi.Config()
 grafana_admin_password = config.require_secret("grafanaAdminPassword")
+grafana_cloud_remote_write_url = config.require("grafanaCloudRemoteWriteUrl")
+grafana_cloud_metrics_username = config.require_secret("grafanaCloudMetricsUsername")
+grafana_cloud_access_policy_token = config.require_secret("grafanaCloudAccessPolicyToken")
+grafana_cloud_stack_url = config.require("grafanaCloudStackUrl")
+
 
 # -----------------------------------------------------------------------------
 # Namespaces
@@ -13,10 +19,28 @@ monitoring_namespace = k8s.core.v1.Namespace(
     metadata=k8s.meta.v1.ObjectMetaArgs(name="monitoring"),
 )
 
+
 app_namespace = k8s.core.v1.Namespace(
     "guestbook",
     metadata=k8s.meta.v1.ObjectMetaArgs(name="guestbook"),
 )
+
+
+# -----------------------------------------------------------------------------
+# Secret for Prometheus remote_write to Grafana Cloud
+# -----------------------------------------------------------------------------
+grafana_cloud_remote_write_secret = k8s.core.v1.Secret(
+    "grafana-cloud-remote-write",
+    metadata=k8s.meta.v1.ObjectMetaArgs(
+        name="grafana-cloud-remote-write",
+        namespace=monitoring_namespace.metadata.name,
+    ),
+    string_data={
+        "username": grafana_cloud_metrics_username,
+        "password": grafana_cloud_access_policy_token,
+    },
+)
+
 
 # -----------------------------------------------------------------------------
 # Deploy Prometheus + Grafana using kube-prometheus-stack
@@ -52,11 +76,28 @@ prometheus_stack = k8s.helm.v3.Chart(
                 "enabled": True,
                 "prometheusSpec": {
                     "serviceMonitorSelectorNilUsesHelmValues": False,
+                    "remoteWrite": [
+                        {
+                            "url": grafana_cloud_remote_write_url,
+                            "basicAuth": {
+                                "username": {
+                                    "name": "grafana-cloud-remote-write",
+                                    "key": "username",
+                                },
+                                "password": {
+                                    "name": "grafana-cloud-remote-write",
+                                    "key": "password",
+                                },
+                            },
+                        }
+                    ],
                 },
             },
         },
     ),
+    opts=pulumi.ResourceOptions(depends_on=[grafana_cloud_remote_write_secret]),
 )
+
 
 # -----------------------------------------------------------------------------
 # Guestbook - Redis leader
@@ -93,6 +134,7 @@ redis_leader_deployment = k8s.apps.v1.Deployment(
     ),
 )
 
+
 redis_leader_service = k8s.core.v1.Service(
     "redis-leader",
     metadata=k8s.meta.v1.ObjectMetaArgs(
@@ -105,6 +147,7 @@ redis_leader_service = k8s.core.v1.Service(
         selector={"app": "redis", "role": "leader"},
     ),
 )
+
 
 # -----------------------------------------------------------------------------
 # Guestbook - Frontend
@@ -145,6 +188,7 @@ frontend_deployment = k8s.apps.v1.Deployment(
     ),
 )
 
+
 frontend_service = k8s.core.v1.Service(
     "frontend",
     metadata=k8s.meta.v1.ObjectMetaArgs(
@@ -165,6 +209,7 @@ frontend_service = k8s.core.v1.Service(
         selector={"app": "guestbook", "tier": "frontend"},
     ),
 )
+
 
 # -----------------------------------------------------------------------------
 # ServiceMonitor
@@ -192,9 +237,9 @@ frontend_service_monitor = k8s.apiextensions.CustomResource(
     opts=pulumi.ResourceOptions(depends_on=[prometheus_stack, frontend_service]),
 )
 
+
 # -----------------------------------------------------------------------------
 # Grafana dashboard
-# Safe focus: pod resource metrics and restarts
 # -----------------------------------------------------------------------------
 dashboard = {
     "title": "Guestbook Resource Overview",
@@ -265,6 +310,7 @@ dashboard = {
     ],
 }
 
+
 grafana_dashboard_cm = k8s.core.v1.ConfigMap(
     "guestbook-grafana-dashboard",
     metadata=k8s.meta.v1.ObjectMetaArgs(
@@ -278,6 +324,7 @@ grafana_dashboard_cm = k8s.core.v1.ConfigMap(
     opts=pulumi.ResourceOptions(depends_on=[prometheus_stack]),
 )
 
+
 # -----------------------------------------------------------------------------
 # Outputs
 # -----------------------------------------------------------------------------
@@ -285,3 +332,5 @@ pulumi.export("grafana_url", "http://localhost:30300")
 pulumi.export("grafana_admin_username", "admin")
 pulumi.export("grafana_admin_password", grafana_admin_password)
 pulumi.export("guestbook_url", "http://localhost:30080")
+pulumi.export("grafana_cloud_stack_url", grafana_cloud_stack_url)
+pulumi.export("grafana_cloud_remote_write_url", grafana_cloud_remote_write_url)
